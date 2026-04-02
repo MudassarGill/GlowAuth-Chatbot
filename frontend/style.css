@@ -119,15 +119,15 @@ body {
 .lamp-head {
     position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
     width: 100px; height: 50px;
-    background: linear-gradient(135deg, #1a1030, #120a25);
+    background: linear-gradient(135deg, #2c3038, #1a1c23);
     border-radius: 50px 50px 8px 8px;
-    border: 1px solid rgba(138,43,226,0.15);
+    border: 1px solid rgba(0,232,123,0.3);
     display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px;
 }
 
 .lamp-bulb {
     width: 28px; height: 28px; border-radius: 50%;
-    background: #1a1030; transition: all 0.6s ease;
+    background: #1a1c23; transition: all 0.6s ease;
 }
 .lamp-container.on .lamp-bulb {
     background: var(--neon-secondary);
@@ -137,30 +137,30 @@ body {
 .lamp-neck {
     position: absolute; top: 68px; left: 50%; transform: translateX(-50%);
     width: 8px; height: 40px;
-    background: linear-gradient(to bottom, #1a1030, #120a25);
+    background: linear-gradient(to bottom, #2c3038, #1a1c23);
     border-radius: 4px;
 }
 
 .lamp-arm {
     position: absolute; top: 105px; left: 50%; transform: translateX(-50%);
     width: 6px; height: 160px;
-    background: linear-gradient(to bottom, #120a25, #0e0820);
+    background: linear-gradient(to bottom, #1a1c23, #121418);
     border-radius: 3px;
 }
 
 .lamp-base-post {
     position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%);
     width: 10px; height: 80px;
-    background: linear-gradient(to bottom, #0e0820, #1a1030);
+    background: linear-gradient(to bottom, #121418, #2c3038);
     border-radius: 5px;
 }
 
 .lamp-base {
     position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
     width: 90px; height: 20px;
-    background: linear-gradient(135deg, #1a1030, #120a25);
+    background: linear-gradient(135deg, #2c3038, #1a1c23);
     border-radius: 10px;
-    border: 1px solid rgba(138,43,226,0.12);
+    border: 1px solid rgba(0,232,123,0.3);
 }
 
 /* Pull Chain */
@@ -169,13 +169,13 @@ body {
     align-items: center; gap: 3px; cursor: pointer; z-index: 10;
     animation: chainSwing 3s ease-in-out infinite;
 }
-.chain-link { width: 3px; height: 10px; background: #4a3a6a; border-radius: 2px; }
+.chain-link { width: 3px; height: 10px; background: #5a606d; border-radius: 2px; }
 .chain-pull {
     width: 18px; height: 18px; border-radius: 50%;
-    background: linear-gradient(135deg, #4a3a6a, #2a1a4a);
+    background: linear-gradient(135deg, #5a606d, #2c3038);
     display: flex; align-items: center; justify-content: center;
-    font-size: 6px; color: #8a7aaa; transition: var(--transition);
-    border: 1px solid rgba(138,43,226,0.2);
+    font-size: 6px; color: #a0a6b5; transition: var(--transition);
+    border: 1px solid rgba(0,232,123,0.3);
 }
 .chain-pull:hover {
     background: var(--neon); color: #fff;
