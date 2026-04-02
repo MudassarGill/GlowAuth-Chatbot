@@ -1,15 +1,16 @@
-"""GlowAuth — FastAPI Backend with Auth & AI Chatbot."""
+"""GlowAuth — FastAPI Backend with Auth, Chat Memory & Google OAuth."""
 
 import os
-import re
 import random
 import datetime
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 import bcrypt
 import jwt
+import httpx
+from dotenv import load_dotenv
 
 from database import init_db, get_connection
 from models import (
@@ -17,14 +18,19 @@ from models import (
     ChatRequest, TokenResponse,
 )
 
-# ---- Config ----
-SECRET_KEY = os.environ.get("JWT_SECRET", "glowauth-super-secret-key-2026")
+# ---- Load .env ----
+load_dotenv()
+
+SECRET_KEY = os.getenv("JWT_SECRET", "glowauth-super-secret-key-2026")
+GROK_API_KEY = os.getenv("GROK_API_KEY", "")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://127.0.0.1:8000/auth/google/callback")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 
 app = FastAPI(title="GlowAuth API", version="1.0.0")
 
-# ---- CORS ----
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -33,15 +39,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---- Init DB on startup ----
+FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
+
+
 @app.on_event("startup")
 def startup():
     init_db()
 
 
 # ---- Serve Frontend ----
-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
-
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 
@@ -78,30 +84,18 @@ def create_token(user_id: int, email: str) -> str:
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def decode_token(token: str) -> dict:
-    try:
-        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-
 # ---- Auth Endpoints ----
 
 @app.post("/signup")
 def signup(req: SignupRequest):
     if len(req.password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
-
     conn = get_connection()
     cursor = conn.cursor()
-    # Check if user exists
     cursor.execute("SELECT id FROM users WHERE email = ?", (req.email,))
     if cursor.fetchone():
         conn.close()
         raise HTTPException(status_code=409, detail="Email already registered")
-
     pw_hash = hash_password(req.password)
     cursor.execute(
         "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
@@ -119,106 +113,154 @@ def login(req: LoginRequest):
     cursor.execute("SELECT id, name, password_hash FROM users WHERE email = ?", (req.email,))
     user = cursor.fetchone()
     conn.close()
-
     if not user or not verify_password(req.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
-
     token = create_token(user["id"], req.email)
     return TokenResponse(access_token=token, user_name=user["name"])
 
 
 @app.post("/forgot-password")
 def forgot_password(req: ForgotPasswordRequest):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id FROM users WHERE email = ?", (req.email,))
-    user = cursor.fetchone()
-    conn.close()
-    # Always return success (security best practice — don't reveal if email exists)
     return {"message": "If an account with that email exists, a reset link has been sent."}
 
 
-# ---- Chatbot ----
+# ---- Google OAuth ----
 
-CHAT_RESPONSES = {
-    "hello": [
-        "Hey there! 👋 I'm GlowBot, your AI assistant. How can I help you today?",
-        "Hello! 🚀 Welcome to GlowAuth. What would you like to know?",
-        "Hi! I'm here and ready to assist. Fire away!",
-    ],
-    "hi": [
-        "Hey! 👋 What's on your mind?",
-        "Hi there! How can I assist you today?",
-    ],
-    "help": [
-        "I can help with:\n🔹 General questions\n🔹 Coding assistance\n🔹 Tech explanations\n🔹 Creative ideas\n\nJust ask me anything! 🧠",
-    ],
-    "who are you": [
-        "I'm GlowBot 🤖 — an AI assistant built into GlowAuth. Created by MudassarGill, I'm here to make your experience smarter!",
-    ],
-    "who made you": [
-        "I was crafted by MudassarGill 🛠️ — check out their work at github.com/MudassarGill!",
-    ],
-    "joke": [
-        "Why do programmers prefer dark mode? Because light attracts bugs! 🐛😄",
-        "A SQL query walks into a bar, sees two tables, and asks... 'Can I JOIN you?' 😂",
-        "Why was the JavaScript developer sad? Because he didn't Node how to Express himself! 😅",
-    ],
-    "python": [
-        "Python is amazing! 🐍 It's versatile, readable, and powers everything from web apps to AI. Fun fact: this very backend is built with Python + FastAPI!",
-    ],
-    "fastapi": [
-        "FastAPI is a modern, high-performance Python web framework. It's async-ready, auto-generates docs, and is blazing fast! ⚡ This app runs on it!",
-    ],
-    "ai": [
-        "AI is transforming the world! 🌍 From language models to computer vision, the possibilities are endless. I'm a small taste of what AI assistants can do!",
-    ],
-    "bye": [
-        "Goodbye! 👋 Come back anytime. I'll be here!",
-        "See you later! 🚀 Have a great day!",
-    ],
-    "thank": [
-        "You're welcome! 😊 Happy to help!",
-        "Anytime! That's what I'm here for! 🙌",
-    ],
-}
+@app.get("/auth/google")
+def google_login():
+    """Redirect user to Google's OAuth consent screen."""
+    if not GOOGLE_CLIENT_ID:
+        return RedirectResponse(
+            url="/?error=Google+OAuth+not+configured.+Add+GOOGLE_CLIENT_ID+to+.env"
+        )
+    scope = "openid email profile"
+    params = (
+        f"client_id={GOOGLE_CLIENT_ID}"
+        f"&redirect_uri={GOOGLE_REDIRECT_URI}"
+        f"&response_type=code"
+        f"&scope={scope.replace(' ', '+')}"
+        f"&access_type=offline"
+    )
+    return RedirectResponse(url=f"https://accounts.google.com/o/oauth2/v2/auth?{params}")
+
+
+@app.get("/auth/google/callback")
+async def google_callback(code: str = None, error: str = None):
+    """Handle Google OAuth callback, create/get user, return JWT."""
+    if error or not code:
+        return RedirectResponse(url="/?error=Google+login+failed")
+
+    async with httpx.AsyncClient() as client:
+        # Exchange code for tokens
+        token_res = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": GOOGLE_REDIRECT_URI,
+            },
+        )
+        token_data = token_res.json()
+        access_token_google = token_data.get("access_token")
+        if not access_token_google:
+            return RedirectResponse(url="/?error=Google+token+exchange+failed")
+
+        # Get user info
+        user_res = await client.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {access_token_google}"},
+        )
+        user_info = user_res.json()
+
+    email = user_info.get("email", "")
+    name = user_info.get("name", "Google User")
+
+    if not email:
+        return RedirectResponse(url="/?error=Could+not+get+email+from+Google")
+
+    # Create or get user in DB
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name FROM users WHERE email = ?", (email,))
+    db_user = cursor.fetchone()
+    if not db_user:
+        # Create account with random password (Google users don't need password)
+        dummy_hash = hash_password(os.urandom(16).hex())
+        cursor.execute(
+            "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
+            (name, email, dummy_hash),
+        )
+        conn.commit()
+        cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
+        db_user = cursor.fetchone()
+    conn.close()
+
+    jwt_token = create_token(db_user["id"], email)
+    # Redirect back to frontend with token in query string
+    return RedirectResponse(
+        url=f"/?token={jwt_token}&name={name}&email={email}"
+    )
+
+
+# ---- Chatbot with Memory ----
+
+SYSTEM_PROMPT = (
+    "You are GlowBot, a friendly and intelligent AI assistant embedded in GlowAuth. "
+    "You were created by MudassarGill (github.com/MudassarGill). "
+    "Keep responses concise, helpful, and conversational. Use emojis occasionally. "
+    "You remember everything from the current conversation."
+)
 
 FALLBACK_RESPONSES = [
-    "That's an interesting thought! 🤔 I'm still learning, but I'd love to explore that topic with you.",
-    "Great question! While I'm a simulated AI, I can tell you this — the future of AI is incredibly exciting! 🚀",
-    "Hmm, let me think about that... 🧠 I may not have the perfect answer, but feel free to ask me something else!",
-    "I appreciate the question! As GlowBot, I'm here to chat and assist. Try asking me about Python, AI, or coding! 💡",
-    "Interesting! I'm always learning. Could you rephrase that or try a different question? 😊",
+    "Hey! 👋 I'm GlowBot (offline mode). Add a Grok API key to `.env` for real AI responses!",
+    "I'm in demo mode 🤖. Set GROK_API_KEY in your `.env` file to unlock full AI power!",
+    "Hi! Connect a Grok API key to get intelligent, context-aware responses. 🚀",
 ]
 
 
-def get_ai_response(message: str) -> str:
-    """Simulate a Grok-like AI response based on keyword matching."""
-    msg_lower = message.lower().strip()
+async def call_grok_api(message: str, history: list) -> str:
+    """Call Grok (xAI) API with full conversation history for memory."""
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-    # Check keyword matches
-    for keyword, responses in CHAT_RESPONSES.items():
-        if keyword in msg_lower:
-            return random.choice(responses)
+    # Append conversation history (memory)
+    for h in history[:-1]:  # exclude current message (already in history)
+        messages.append({"role": h.role, "content": h.content})
 
-    # Math expressions
-    if re.match(r'^[\d\s\+\-\*\/\.\(\)]+$', msg_lower):
-        try:
-            result = eval(msg_lower)  # Only safe math expressions
-            return f"The answer is **{result}** 🧮"
-        except Exception:
-            pass
+    # Add current user message
+    messages.append({"role": "user", "content": message})
 
-    # Greeting patterns
-    if any(g in msg_lower for g in ["hey", "hola", "sup", "yo", "what's up"]):
-        return random.choice(CHAT_RESPONSES["hello"])
-
-    return random.choice(FALLBACK_RESPONSES)
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            "https://api.x.ai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROK_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "grok-3-mini",
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": 512,
+            },
+        )
+        if response.status_code == 200:
+            return response.json()["choices"][0]["message"]["content"]
+        else:
+            return f"⚠️ API Error ({response.status_code}). Check your Grok API key."
 
 
 @app.post("/chat")
-def chat(req: ChatRequest):
+async def chat(req: ChatRequest):
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
-    response = get_ai_response(req.message)
-    return {"response": response}
+
+    if GROK_API_KEY and GROK_API_KEY not in ("", "your-grok-api-key-here"):
+        try:
+            reply = await call_grok_api(req.message, req.history or [])
+            return {"response": reply}
+        except Exception as e:
+            return {"response": f"⚠️ Connection error: {str(e)}"}
+    else:
+        return {"response": random.choice(FALLBACK_RESPONSES)}

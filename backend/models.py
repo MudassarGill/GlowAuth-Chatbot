@@ -1,5 +1,6 @@
-"""GlowAuth — Pydantic models for request/response validation."""
+"""GlowAuth — Pydantic models."""
 
+from typing import List, Optional
 from pydantic import BaseModel, EmailStr
 
 
@@ -18,8 +19,14 @@ class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
 
+class ChatMessage(BaseModel):
+    role: str   # 'user' or 'assistant'
+    content: str
+
+
 class ChatRequest(BaseModel):
     message: str
+    history: Optional[List[ChatMessage]] = []   # Full conversation memory
 
 
 class TokenResponse(BaseModel):

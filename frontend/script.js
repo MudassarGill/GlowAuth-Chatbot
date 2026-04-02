@@ -1,47 +1,61 @@
 /* =============================================
    GlowAuth — Frontend Logic
+   Chat Memory + Google OAuth + Burst Animation
    ============================================= */
 
 const API_URL = 'http://127.0.0.1:8000';
 let authToken = localStorage.getItem('glowauth_token');
 let currentUser = JSON.parse(localStorage.getItem('glowauth_user') || 'null');
 
+// Chat memory — full conversation history sent to backend
+let chatHistory = [];
+
 // ---- On Load ----
 document.addEventListener('DOMContentLoaded', () => {
     initParticles();
     setupFormListeners();
     setupChatInput();
+    checkGoogleCallback();
     if (authToken && currentUser) {
-        showDashboard(currentUser.name);
+        showDashboard(currentUser.name, false); // skip burst on page reload
     }
 });
 
 // ============ PARTICLES ============
 function initParticles() {
     const container = document.getElementById('bgParticles');
-    for (let i = 0; i < 40; i++) {
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes floatParticle {
+            0%   { opacity: 0; transform: translateY(0) translateX(0) scale(0); }
+            10%  { opacity: 1; transform: scale(1); }
+            90%  { opacity: 0.6; }
+            100% { opacity: 0; transform: translateY(-90vh) translateX(var(--tx)) scale(0.4); }
+        }
+    `;
+    document.head.appendChild(style);
+
+    for (let i = 0; i < 35; i++) {
         const p = document.createElement('div');
+        const tx = (Math.random() - 0.5) * 120;
+        const size = Math.random() * 3 + 1;
+        const delay = Math.random() * 20;
+        const dur = Math.random() * 15 + 12;
+        const colors = ['rgba(0,232,123,0.5)', 'rgba(77,242,168,0.4)', 'rgba(0,209,109,0.3)'];
+        const color = colors[Math.floor(Math.random() * colors.length)];
         p.style.cssText = `
             position:absolute;
-            width:${Math.random() * 3 + 1}px;
-            height:${Math.random() * 3 + 1}px;
-            background:rgba(0,255,136,${Math.random() * 0.3 + 0.05});
+            width:${size}px; height:${size}px;
+            background:${color};
             border-radius:50%;
             left:${Math.random() * 100}%;
-            top:${Math.random() * 100}%;
-            animation: floatParticle ${Math.random() * 15 + 10}s linear infinite;
+            bottom:0;
+            --tx:${tx}px;
+            animation: floatParticle ${dur}s linear ${delay}s infinite;
             opacity:0;
         `;
         container.appendChild(p);
     }
-    const style = document.createElement('style');
-    style.textContent = `@keyframes floatParticle {
-        0% { opacity:0; transform:translateY(0) translateX(0); }
-        10% { opacity:1; }
-        90% { opacity:1; }
-        100% { opacity:0; transform:translateY(-100vh) translateX(${Math.random() > 0.5 ? '' : '-'}${Math.random()*80}px); }
-    }`;
-    document.head.appendChild(style);
 }
 
 // ============ DESK LAMP ============
@@ -51,19 +65,14 @@ const lampChain = document.getElementById('lampChain');
 const authPanel = document.getElementById('authPanel');
 const lampHint = document.getElementById('lampHint');
 
-lampChain.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleLamp();
-});
+lampChain.addEventListener('click', e => { e.stopPropagation(); toggleLamp(); });
 lampContainer.addEventListener('click', toggleLamp);
 
 function toggleLamp() {
     lampOn = !lampOn;
     lampContainer.classList.toggle('on', lampOn);
     authPanel.classList.toggle('visible', lampOn);
-    if (lampOn) lampHint.style.opacity = '0';
-    else lampHint.style.opacity = '1';
-    // Pull animation
+    lampHint.style.opacity = lampOn ? '0' : '1';
     lampChain.style.transform = 'translateY(8px)';
     setTimeout(() => lampChain.style.transform = '', 200);
 }
@@ -71,19 +80,16 @@ function toggleLamp() {
 // ============ AUTH FORMS ============
 function switchForm(target, e) {
     if (e) e.preventDefault();
-    const forms = document.querySelectorAll('.auth-form');
-    forms.forEach(f => { f.classList.add('hidden'); f.style.animation = ''; });
-    const show = target === 'signup' ? document.getElementById('signupForm')
-               : target === 'forgot' ? document.getElementById('forgotForm')
-               : document.getElementById('loginForm');
-    show.classList.remove('hidden');
-    show.style.animation = 'fadeInUp 0.4s ease';
+    document.querySelectorAll('.auth-form').forEach(f => f.classList.add('hidden'));
+    const show = target === 'signup' ? 'signupForm' : target === 'forgot' ? 'forgotForm' : 'loginForm';
+    const el = document.getElementById(show);
+    el.classList.remove('hidden');
+    el.style.animation = 'none';
+    el.offsetHeight;
+    el.style.animation = 'fadeInUp 0.4s ease';
 }
 
-function showForgotPassword(e) {
-    e.preventDefault();
-    switchForm('forgot');
-}
+function showForgotPassword(e) { e.preventDefault(); switchForm('forgot'); }
 
 function togglePassword(id, btn) {
     const inp = document.getElementById(id);
@@ -113,12 +119,9 @@ async function handleLogin(e) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Login failed');
-        authToken = data.access_token;
-        currentUser = { name: data.user_name, email };
-        localStorage.setItem('glowauth_token', authToken);
-        localStorage.setItem('glowauth_user', JSON.stringify(currentUser));
+        saveSession(data.access_token, data.user_name, email);
         showToast('Login successful! 🚀', 'success');
-        setTimeout(() => showDashboard(data.user_name), 600);
+        setTimeout(() => showDashboard(data.user_name, true), 500);
     } catch (err) {
         showToast(err.message, 'error');
     } finally {
@@ -168,7 +171,7 @@ async function handleForgot(e) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Request failed');
-        showToast(data.message || 'Reset link sent! Check your email.', 'success');
+        showToast(data.message || 'Reset link sent!', 'success');
     } catch (err) {
         showToast(err.message, 'error');
     } finally {
@@ -176,53 +179,104 @@ async function handleForgot(e) {
     }
 }
 
+// ============ GOOGLE OAUTH ============
+function loginWithGoogle() {
+    // Redirect to backend Google OAuth endpoint
+    window.location.href = `${API_URL}/auth/google`;
+}
+
+function loginWithApple() {
+    showToast('Apple login requires an Apple Developer account.', 'info');
+}
+
+function checkGoogleCallback() {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const name = params.get('name');
+    const email = params.get('email');
+    if (token && name) {
+        // Clean URL
+        window.history.replaceState({}, document.title, '/');
+        saveSession(token, name, email || '');
+        showToast('Google login successful! 🚀', 'success');
+        setTimeout(() => showDashboard(name, true), 500);
+    }
+}
+
+function saveSession(token, name, email) {
+    authToken = token;
+    currentUser = { name, email };
+    localStorage.setItem('glowauth_token', token);
+    localStorage.setItem('glowauth_user', JSON.stringify(currentUser));
+}
+
 // ============ DASHBOARD ============
-function showDashboard(name) {
+function showDashboard(name, showBurst = true) {
     document.getElementById('authScreen').classList.add('hidden');
     document.getElementById('dashboardScreen').classList.remove('hidden');
     document.getElementById('userName').textContent = name || 'User';
-    animateWelcome();
+    chatHistory = []; // Reset chat memory on new login
+
+    if (showBurst) {
+        playWelcomeBurst(name);
+    }
     spawnWelcomeParticles();
 }
 
-function animateWelcome() {
-    const title = document.getElementById('welcomeTitle');
-    title.style.animation = 'none';
-    title.offsetHeight; // reflow
-    title.style.animation = 'fadeInUp 0.8s ease, shineText 3s linear infinite';
+function playWelcomeBurst(name) {
+    const burst = document.getElementById('welcomeBurst');
+    const burstName = document.getElementById('burstUserName');
+    burstName.textContent = name || 'User';
+    burst.classList.remove('hidden');
+
+    // Auto dismiss after 2.5s
+    setTimeout(() => {
+        burst.style.animation = 'burstFadeOut 0.5s ease forwards';
+        setTimeout(() => {
+            burst.classList.add('hidden');
+            burst.style.animation = '';
+        }, 500);
+    }, 2500);
 }
+
+// Add fadeOut keyframe dynamically
+const burstStyle = document.createElement('style');
+burstStyle.textContent = `@keyframes burstFadeOut { from { opacity:1; } to { opacity:0; transform: scale(1.05); } }`;
+document.head.appendChild(burstStyle);
 
 function spawnWelcomeParticles() {
     const container = document.getElementById('welcomeParticles');
     container.innerHTML = '';
-    for (let i = 0; i < 30; i++) {
-        const p = document.createElement('div');
-        const size = Math.random() * 6 + 2;
-        const x = Math.random() * 100;
-        const delay = Math.random() * 2;
-        p.style.cssText = `
-            position:absolute; width:${size}px; height:${size}px;
-            background:rgba(0,255,136,${Math.random()*0.4+0.1});
-            border-radius:50%; left:${x}%; bottom:0;
-            animation: riseParticle ${Math.random()*3+2}s ease-out ${delay}s both;
-        `;
-        container.appendChild(p);
-    }
+    const style = document.createElement('style');
+    style.id = 'riseStyle';
     if (!document.getElementById('riseStyle')) {
-        const s = document.createElement('style');
-        s.id = 'riseStyle';
-        s.textContent = `@keyframes riseParticle {
+        style.textContent = `@keyframes riseParticle {
             0% { opacity:0; transform:translateY(0) scale(0); }
             20% { opacity:1; transform:scale(1); }
-            100% { opacity:0; transform:translateY(-300px) translateX(${Math.random()>0.5?'':'-'}${Math.random()*60}px) scale(0.3); }
+            100% { opacity:0; transform:translateY(-280px) translateX(var(--rx)) scale(0.3); }
         }`;
-        document.head.appendChild(s);
+        document.head.appendChild(style);
+    }
+    for (let i = 0; i < 28; i++) {
+        const p = document.createElement('div');
+        const rx = (Math.random() - 0.5) * 120;
+        const size = Math.random() * 7 + 2;
+        const colors = ['#00e87b', '#00d16d', '#4df2a8', '#00a657'];
+        p.style.cssText = `
+            position:absolute; width:${size}px; height:${size}px;
+            background:${colors[Math.floor(Math.random() * colors.length)]};
+            border-radius:50%; left:${Math.random() * 100}%; bottom:0;
+            --rx:${rx}px; opacity:0;
+            animation: riseParticle ${Math.random()*2+2}s ease-out ${Math.random()*1.5}s both;
+        `;
+        container.appendChild(p);
     }
 }
 
 function logout() {
     authToken = null;
     currentUser = null;
+    chatHistory = [];
     localStorage.removeItem('glowauth_token');
     localStorage.removeItem('glowauth_user');
     document.getElementById('dashboardScreen').classList.add('hidden');
@@ -234,12 +288,14 @@ function logout() {
     showToast('Logged out successfully', 'info');
 }
 
-// ============ CHATBOT ============
+// ============ CHATBOT WITH MEMORY ============
 function setupChatInput() {
     const input = document.getElementById('chatInput');
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-    });
+    if (input) {
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+        });
+    }
 }
 
 async function sendMessage() {
@@ -247,20 +303,38 @@ async function sendMessage() {
     const msg = input.value.trim();
     if (!msg) return;
     input.value = '';
+
+    // Add user message to UI
     addBubble(msg, 'user');
+
+    // Add to conversation history (memory)
+    chatHistory.push({ role: 'user', content: msg });
+
     const typingEl = addTypingIndicator();
+
     try {
         const res = await fetch(`${API_URL}/chat`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-            body: JSON.stringify({ message: msg })
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken || ''}`
+            },
+            body: JSON.stringify({
+                message: msg,
+                history: chatHistory  // Send full conversation history
+            })
         });
         const data = await res.json();
         typingEl.remove();
-        addBubble(data.response || data.detail || 'Something went wrong.', 'bot');
+        const reply = data.response || data.detail || 'Something went wrong.';
+
+        // Add bot reply to memory
+        chatHistory.push({ role: 'assistant', content: reply });
+
+        addBubble(reply, 'bot');
     } catch (err) {
         typingEl.remove();
-        addBubble('❌ Could not connect to the server.', 'bot');
+        addBubble('❌ Could not connect to the server. Make sure the backend is running.', 'bot');
     }
 }
 
@@ -282,24 +356,34 @@ function addTypingIndicator() {
     const container = document.getElementById('chatMessages');
     const el = document.createElement('div');
     el.className = 'chat-bubble bot';
-    el.innerHTML = `<div class="bubble-avatar"><i class="fas fa-robot"></i></div>
-        <div class="bubble-content"><div class="typing-indicator"><span></span><span></span><span></span></div></div>`;
+    el.innerHTML = `
+        <div class="bubble-avatar"><i class="fas fa-robot"></i></div>
+        <div class="bubble-content"><div class="typing-indicator"><span></span><span></span><span></span></div></div>
+    `;
     container.appendChild(el);
     container.scrollTop = container.scrollHeight;
     return el;
 }
 
 function clearChat() {
+    chatHistory = []; // Clear memory too
     const container = document.getElementById('chatMessages');
-    container.innerHTML = `<div class="chat-bubble bot"><div class="bubble-avatar"><i class="fas fa-robot"></i></div>
-        <div class="bubble-content"><p>Chat cleared! How can I help you? 🚀</p><span class="bubble-time">Just now</span></div></div>`;
+    container.innerHTML = `
+        <div class="chat-bubble bot">
+            <div class="bubble-avatar"><i class="fas fa-robot"></i></div>
+            <div class="bubble-content">
+                <p>Chat cleared! I've also reset my memory. Let's start fresh! 🚀</p>
+                <span class="bubble-time">Just now</span>
+            </div>
+        </div>
+    `;
 }
 
 // ============ UTILITIES ============
 function showToast(message, type = 'info') {
     const container = document.getElementById('toastContainer');
-    const toast = document.createElement('div');
     const icons = { success: 'fa-check-circle', error: 'fa-exclamation-circle', info: 'fa-info-circle' };
+    const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.innerHTML = `<i class="fas ${icons[type] || icons.info}"></i>${message}`;
     container.appendChild(toast);
