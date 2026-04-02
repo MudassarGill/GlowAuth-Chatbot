@@ -342,7 +342,7 @@ function addBubble(text, type) {
     const container = document.getElementById('chatMessages');
     const bubble = document.createElement('div');
     bubble.className = `chat-bubble ${type}`;
-    const icon = type === 'bot' ? 'fa-robot' : 'fa-user';
+    const icon = type === 'bot' ? 'fa-brain' : 'fa-user';
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     bubble.innerHTML = `
         <div class="bubble-avatar"><i class="fas ${icon}"></i></div>
@@ -357,7 +357,7 @@ function addTypingIndicator() {
     const el = document.createElement('div');
     el.className = 'chat-bubble bot';
     el.innerHTML = `
-        <div class="bubble-avatar"><i class="fas fa-robot"></i></div>
+        <div class="bubble-avatar"><i class="fas fa-brain"></i></div>
         <div class="bubble-content"><div class="typing-indicator"><span></span><span></span><span></span></div></div>
     `;
     container.appendChild(el);
@@ -370,7 +370,7 @@ function clearChat() {
     const container = document.getElementById('chatMessages');
     container.innerHTML = `
         <div class="chat-bubble bot">
-            <div class="bubble-avatar"><i class="fas fa-robot"></i></div>
+            <div class="bubble-avatar"><i class="fas fa-brain"></i></div>
             <div class="bubble-content">
                 <p>Chat cleared! I've also reset my memory. Let's start fresh! 🚀</p>
                 <span class="bubble-time">Just now</span>

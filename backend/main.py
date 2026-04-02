@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 import bcrypt
 import jwt
 import httpx
+from pathlib import Path
 from dotenv import load_dotenv
 
 from database import init_db, get_connection
@@ -19,10 +20,12 @@ from models import (
 )
 
 # ---- Load .env ----
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env", override=True)
 
 SECRET_KEY = os.getenv("JWT_SECRET", "glowauth-super-secret-key-2026")
-GROK_API_KEY = os.getenv("GROK_API_KEY", "")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://127.0.0.1:8000/auth/google/callback")
@@ -220,8 +223,8 @@ FALLBACK_RESPONSES = [
 ]
 
 
-async def call_grok_api(message: str, history: list) -> str:
-    """Call Grok (xAI) API with full conversation history for memory."""
+async def call_ai_api(message: str, history: list) -> str:
+    """Call Groq API with full conversation history for memory."""
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
     # Append conversation history (memory)
@@ -233,13 +236,13 @@ async def call_grok_api(message: str, history: list) -> str:
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
-            "https://api.x.ai/v1/chat/completions",
+            "https://api.groq.com/openai/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {GROK_API_KEY}",
+                "Authorization": f"Bearer {GROQ_API_KEY}",
                 "Content-Type": "application/json",
             },
             json={
-                "model": "grok-3-mini",
+                "model": GROQ_MODEL,
                 "messages": messages,
                 "temperature": 0.7,
                 "max_tokens": 512,
@@ -248,7 +251,8 @@ async def call_grok_api(message: str, history: list) -> str:
         if response.status_code == 200:
             return response.json()["choices"][0]["message"]["content"]
         else:
-            return f"⚠️ API Error ({response.status_code}). Check your Grok API key."
+            print(f"Groq API Error Response: {response.text}")
+            return f"⚠️ API Error ({response.status_code}). Please check your API key."
 
 
 @app.post("/chat")
@@ -256,9 +260,9 @@ async def chat(req: ChatRequest):
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    if GROK_API_KEY and GROK_API_KEY not in ("", "your-grok-api-key-here"):
+    if GROQ_API_KEY and GROQ_API_KEY not in ("", "your-grok-api-key-here", "your-groq-api-key-here"):
         try:
-            reply = await call_grok_api(req.message, req.history or [])
+            reply = await call_ai_api(req.message, req.history or [])
             return {"response": reply}
         except Exception as e:
             return {"response": f"⚠️ Connection error: {str(e)}"}
