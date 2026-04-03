@@ -219,7 +219,7 @@ SYSTEM_PROMPT = (
 FALLBACK_RESPONSES = [
     "Hey! 👋 I'm GlowBot (offline mode). Add a Grok API key to `.env` for real AI responses!",
     "I'm in demo mode . Set GROK_API_KEY in your `.env` file to unlock full AI power!",
-    "Hi! Connect a Grok API key to get intelligent, context-aware responses.   ",
+    "Hi! Connect a Grok API key to get intelligent, context-aware responses.",
 ]
 
 
@@ -265,6 +265,6 @@ async def chat(req: ChatRequest):
             reply = await call_ai_api(req.message, req.history or [])
             return {"response": reply}
         except Exception as e:
-            return {"response": f"⚠️ Connection error: {str(e)}"}
+            return {"response": f" Connection error: {str(e)}"}
     else:
         return {"response": random.choice(FALLBACK_RESPONSES)}
