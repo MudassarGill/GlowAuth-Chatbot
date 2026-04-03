@@ -218,8 +218,8 @@ SYSTEM_PROMPT = (
 
 FALLBACK_RESPONSES = [
     "Hey! 👋 I'm GlowBot (offline mode). Add a Grok API key to `.env` for real AI responses!",
-    "I'm in demo mode 🤖. Set GROK_API_KEY in your `.env` file to unlock full AI power!",
-    "Hi! Connect a Grok API key to get intelligent, context-aware responses. 🚀",
+    "I'm in demo mode . Set GROK_API_KEY in your `.env` file to unlock full AI power!",
+    "Hi! Connect a Grok API key to get intelligent, context-aware responses.   ",
 ]
 
 
