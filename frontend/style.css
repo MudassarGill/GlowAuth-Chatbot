@@ -411,13 +411,14 @@ body {
 .dash-brand i { color: var(--neon-secondary); }
 .dash-brand strong { color: var(--neon-secondary); }
 .dash-nav-right { display: flex; align-items: center; gap: 16px; }
-.github-link {
-    display: flex; align-items: center; gap: 8px; color: var(--text-secondary);
-    text-decoration: none; font-size: 0.88rem; padding: 8px 14px;
+.nav-socials { display: flex; align-items: center; gap: 8px; }
+.social-nav-btn {
+    display: flex; align-items: center; justify-content: center; width: 36px; height: 36px;
+    color: var(--text-secondary); text-decoration: none; font-size: 1.1rem;
     border: 1px solid rgba(0,232,123,0.15); border-radius: var(--radius-sm);
-    transition: var(--transition);
+    background: rgba(0,232,123,0.02); transition: var(--transition);
 }
-.github-link:hover { color: var(--neon-soft); border-color: var(--neon); background: var(--neon-subtle); }
+.social-nav-btn:hover { color: var(--neon-soft); border-color: var(--neon); background: var(--neon-subtle); transform: translateY(-2px); }
 .user-avatar {
     width: 38px; height: 38px; border-radius: 50%;
     background: linear-gradient(135deg, var(--neon), var(--neon-secondary));
@@ -592,13 +593,14 @@ body {
 }
 .github-info h3 { font-size: 1rem; font-weight: 600; margin-bottom: 2px; }
 .github-info p { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 8px; }
+.card-socials { display: flex; gap: 10px; margin-top: 6px; }
 .github-btn {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 6px 14px; background: linear-gradient(135deg, var(--neon), var(--neon-secondary));
-    color: #fff; text-decoration: none; border-radius: 20px;
-    font-size: 0.78rem; font-weight: 600; transition: var(--transition);
+    display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+    background: linear-gradient(135deg, var(--neon), var(--neon-secondary));
+    color: #fff; text-decoration: none; border-radius: 50%;
+    font-size: 1rem; transition: var(--transition);
 }
-.github-btn:hover { box-shadow: 0 4px 16px var(--neon-glow); transform: translateY(-1px); }
+.github-btn:hover { box-shadow: 0 4px 16px var(--neon-glow); transform: translateY(-2px); }
 
 /* Footer */
 .dash-footer { padding: 24px; text-align: center; font-size: 0.8rem; color: var(--text-muted); border-top: 1px solid rgba(0,232,123,0.08); }
@@ -623,7 +625,6 @@ body {
     .chat-section { padding: 0 16px 40px; }
     .dash-navbar { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
     .dash-nav-right { gap: 8px; }
-    .github-link span { display: none; }
 }
 
 @media (max-width: 480px) {
