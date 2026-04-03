@@ -78,6 +78,8 @@ FastAPI serves the frontend directly. Simply open your browser and go to:
 
 **MudassarGill**
 - GitHub: [@MudassarGill](https://github.com/MudassarGill)
+- LinkedIn: [m-mudassar-85](https://www.linkedin.com/in/m-mudassar-85)
+- Email: [mudassarjutt65030@gmail.com](mailto:mudassarjutt65030@gmail.com)
 
 ---
 *Feel free to star ⭐ this repository if you find it helpful!*
